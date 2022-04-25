@@ -1,0 +1,104 @@
+Option Compare Text
+Sub VLookUp()
+    Dim src_wb, a_wb As Workbook
+    Dim src, src_dir As String
+    Dim aHeader(3), fRng(3) As String 'change the numbers in parentheses according to the number of headers in the data to be harnessed
+    Dim src_RCodesCol, SRCF_RANGE, src_wbName As String
+    Dim LRsrc_data, LCsrc_data, Last_Row, src_CommentCol, i As Integer
+
+    'Define headers
+    aHeader(0) = "comment"
+    aHeader(1) = "reason code"
+    aHeader(2) = "po number"
+    
+    'Save file
+    If ActiveWorkbook.Saved = False Then
+        If MsgBox("This will overwrite or save the current file to the folder at" & vbCrLf & "" & vbCrLf & "C:\Users\Documents\" & _ 'change the path accordingly
+            vbCrLf & "Do you wish to continue?", vbYesNo) = vbNo Then
+            Exit Sub
+        End If
+    End If
+    
+    'Set starting Workbook *
+    Set a_wb = ActiveWorkbook
+    Application.DisplayAlerts = False
+    a_wb.SaveAs fileName:="C:\Users\Documents\" & "\" & a_wb.Name 'change the path accordingly
+    Application.DisplayAlerts = True
+'------------------------------------------------------- PART 1: GETTING PREVIOUS FILE INFO -------------------------------------------------------
+    'Get previous data file*
+    src = Application.GetOpenFilename(FileFilter:="Excel files (*.xlsx*), *.xlsx*", Title:="Select previous 'Past Dues' file", MultiSelect:=False)
+    On Error GoTo 0
+    If src = False Then
+        MsgBox "You must select a source file to proceed. Terminating process.", vbExclamation
+        Exit Sub
+    Else
+        src_dir = Dir(src)
+    End If
+    'Open previous data file *
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    Application.AskToUpdateLinks = False
+    Workbooks.Open fileName:=src, ReadOnly:=True
+    'Prepare previous data file *
+    Set src_wb = ActiveWorkbook
+    src_wb.Sheets(1).Activate
+    src_wbName = ActiveSheet.Name
+    If (ActiveSheet.AutoFilterMode And ActiveSheet.FilterMode) Or ActiveSheet.FilterMode Then
+        ActiveSheet.ShowAllData
+    End If
+    With ActiveWindow
+        .SplitColumn = 0
+        .SplitRow = 0
+    End With
+    ActiveWindow.FreezePanes = False
+    'Find Comment, Reason Code and PO Number headers in the source file *
+    For i = 0 To 2
+        fRng(i) = Cells.Find(what:=aHeader(i)).Address
+        If Range(fRng(i)) Is Nothing Then
+            aHeader(i) = aHeader(i) & "s" 'just in case the header's were mistyped with a extra "s" at the end
+            If Range(fRng(i)) Is Nothing Then
+                MsgBox "There is an issue with the " & aHeader(i) & " header, please check it and retry!", vbExclamation
+            End If
+        End If
+    Next
+    'Last filled cell in table - assuming the first column is complete.
+    LRsrc_data = Range("A:A").End(xlDown).Row
+    LCsrc_data = Range("A:A").End(xlToRight).Column
+    
+    'Get VLookUp search range *
+    SRCF_RANGE = "$" & Split(Range(fRng(2)).Address, "$")(1) & ":$" & Split(Range(fRng(1)).Address, "$")(1)
+    src_CommentCol = Range(fRng(0)).Column - Range(fRng(2)).Column + 1
+    src_RCodesCol = Range(fRng(1)).Column - Range(fRng(2)).Column + 1
+    
+'------------------------------------------------------- PART 2: GETTING CURRENT FILE INFO -------------------------------------------------------
+    'Activate starting workbook *
+    a_wb.Sheets(1).Activate
+    
+    'Get current file Comment and Reason Codes section size and address *
+        'find Comment, Reason Code and PO Number headers in the source file *
+    For i = 0 To 2 'this block could be made into an external Sub or Function.
+        fRng(i) = Cells.Find(what:=aHeader(i)).Address
+        If Range(fRng(i)) Is Nothing Then
+            aHeader(i) = aHeader(i) & "s"
+            If Range(fRng(i)) Is Nothing Then
+                MsgBox "There is an issue with the " & aHeader(i) & " header, please check it and retry!", vbExclamation
+            End If
+        End If
+    Next
+    
+    'VLookUp Function for Comment and Reason Codes Section *
+    Dim PO_NUMBER As String
+    Last_Row = Range("A:A").End(xlDown).Row
+    For i = 2 To Last_Row
+        PO_NUMBER = Replace(Cells(i, Range(fRng(2)).Column).Address, "$", "")
+        Cells(i, Range(fRng(0)).Column).Formula = "=VLOOKUP(" & PO_NUMBER & ",'[" & src_dir & "]" & src_wbName & "'!" & SRCF_RANGE & "," & src_CommentCol & ",0)"
+        Cells(i, Range(fRng(1)).Column).Formula = "=VLOOKUP(" & PO_NUMBER & ",'[" & src_dir & "]" & src_wbName & "'!" & SRCF_RANGE & "," & src_RCodesCol & ",0)"
+    Next
+        
+    'Close source file
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+    Application.AskToUpdateLinks = True
+    src_wb.Close SaveChanges:=False
+
+End Sub
